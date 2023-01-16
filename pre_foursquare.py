@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 
 
 def read_path(path, colName):
-    print('Start Reading')
+    print('Start Reading: ' + path)
     f = open(path, encoding='UTF-8')
     text = []
     for line in f:
@@ -41,7 +41,7 @@ def create_id_dic(np_filter_checkin):
 
 # v1: 只group單一項目
 # 前處理內容: 1. 只取US(排除Alaska & Hawaii)資料; 2. 移除check-in < 10 次的User; 3. 移除被check-in < 20 次的POI
-def preprocess_v1(np_checkin, np_poi):
+def preprocess_old(np_checkin, np_poi):
     # 轉成DF (懶得改程式)
     df_checkin = pd.DataFrame(np_checkin, columns=col_checkin)
     df_poi = pd.DataFrame(np_poi, columns=col_poi)
@@ -67,6 +67,37 @@ def preprocess_v1(np_checkin, np_poi):
     return df_checkin.to_numpy()
 
 
+def preprocess_v1(np_checkin, np_poi):
+    # 轉成DF (懶得改程式)
+    df_checkin = pd.DataFrame(np_checkin, columns=col_checkin)
+    df_poi = pd.DataFrame(np_poi, columns=col_poi)
+
+    print("# Ori user = " + str(len(df_checkin['uid'].unique())))
+    print("# Ori poi = " + str(len(df_checkin['lid'].unique())))
+    print("# Ori checking = " + str(len(df_checkin)))
+
+    # 1
+    df_poi_us = df_poi[df_poi['country'] == 'US']  # len() = 1990327
+    df_checkin = df_checkin[df_checkin['lid'].isin(df_poi_us['lid'])]  # len() =
+
+    # 2
+    gp = df_checkin.groupby('lid').size().reset_index(name='count')
+    tf = gp[gp['count'] >= 15].reset_index()
+    df_checkin = df_checkin[df_checkin['lid'].isin(tf['lid'])]
+
+    # 3
+    gp = df_checkin.groupby(['uid', 'lid']).size().reset_index(name='count')
+    gp = gp.groupby('uid').size().reset_index(name='count')
+    tf = gp[gp['count'] >= 10].reset_index()
+    df_checkin = df_checkin[df_checkin['uid'].isin(tf['uid'])]  # len() =
+
+    print("# user = " + str(len(df_checkin['uid'].unique())))  #
+    print("# poi = " + str(len(df_checkin['lid'].unique())))  #
+    print("# checking = " + str(len(df_checkin)))  #
+
+    return df_checkin.to_numpy()
+
+
 # v2: 先group user 再 group poi 避免User都只訪問相同poi...
 # 前處理內容: 1. 只取US(排除Alaska & Hawaii)資料; 2. 移除check-in 不同poi < 10 次的User; 3. 移除被 check-in < 10 次的POI
 def preprocess_v2(np_checkin, np_poi):
@@ -82,17 +113,54 @@ def preprocess_v2(np_checkin, np_poi):
     df_poi_us = df_poi[df_poi['country'] == 'US']  # len() = 1990327
     df_checkin = df_checkin[df_checkin['lid'].isin(df_poi_us['lid'])]  # len() = 3244126
 
-    # 3
+    # 2
     gp = df_checkin.groupby(['lid', 'uid']).size().reset_index(name='count')
     gp = gp.groupby('lid').size().reset_index(name='count')
-    tf = gp[gp['count'] >= 10].reset_index()
+    tf = gp[gp['count'] >= 15].reset_index()
     df_checkin = df_checkin[df_checkin['lid'].isin(tf['lid'])]
 
-    # 2
+    # 3
     gp = df_checkin.groupby(['uid', 'lid']).size().reset_index(name='count')
     gp = gp.groupby('uid').size().reset_index(name='count')
     tf = gp[gp['count'] >= 10].reset_index()
-    df_checkin = df_checkin[df_checkin['uid'].isin(tf['uid'])]  # len() = 3216477
+    df_checkin = df_checkin[df_checkin['uid'].isin(tf['uid'])]  # len() =
+
+    print("# user = " + str(len(df_checkin['uid'].unique())))  #
+    print("# poi = " + str(len(df_checkin['lid'].unique())))  #
+    print("# checking = " + str(len(df_checkin)))  #
+
+    return df_checkin.to_numpy()
+
+
+# small: 驗證程式用
+#
+def preprocess_small(np_checkin, np_poi):
+    # 轉成DF (懶得改程式)
+    df_checkin = pd.DataFrame(np_checkin, columns=col_checkin)
+    df_poi = pd.DataFrame(np_poi, columns=col_poi)
+
+    print("# Ori user = " + str(len(df_checkin['uid'].unique())))
+    print("# Ori poi = " + str(len(df_checkin['lid'].unique())))
+    print("# Ori checking = " + str(len(df_checkin)))
+
+    # 1
+    df_poi_jp = df_poi[df_poi['country'] == 'US']  # len() = 1990327
+    df_checkin = df_checkin[df_checkin['lid'].isin(df_poi_jp['lid'])]  # len() = 3244126
+
+    top10_user = df_checkin.groupby(['uid']).size().reset_index(name='count').sort_values('count', ascending=False)[:10]
+    df_checkin = df_checkin[df_checkin['uid'].isin(top10_user['uid'])]
+
+    # 3
+    # gp = df_checkin.groupby(['lid', 'uid']).size().reset_index(name='count')
+    # gp = gp.groupby('lid').size().reset_index(name='count')
+    # tf = gp[gp['count'] >= 10].reset_index()
+    # df_checkin = df_checkin[df_checkin['lid'].isin(tf['lid'])]
+    #
+    # # 2
+    # gp = df_checkin.groupby(['uid', 'lid']).size().reset_index(name='count')
+    # gp = gp.groupby('uid').size().reset_index(name='count')
+    # tf = gp[gp['count'] >= 10].reset_index()
+    # df_checkin = df_checkin[df_checkin['uid'].isin(tf['uid'])]  # len() = 3216477
 
     print("# user = " + str(len(df_checkin['uid'].unique())))  #
     print("# poi = " + str(len(df_checkin['lid'].unique())))  #
@@ -178,8 +246,8 @@ def get_final_checkin():
 
 
 def partition_checkin():
-    final_checkin = read_path(fin_checkin, fin_col_checkin)
-    df_final_checkin = pd.DataFrame(final_checkin, columns=fin_col_checkin)
+    checkin = read_path(fin_checkin, fin_col_checkin)
+    df_final_checkin = pd.DataFrame(checkin, columns=fin_col_checkin)
     df_final_checkin['uid'] = df_final_checkin['uid'].astype('int')
     df_final_checkin['lid'] = df_final_checkin['lid'].astype('int')
     gp = df_final_checkin.groupby(['uid', 'lid']).size().reset_index(name='freq')
@@ -197,10 +265,10 @@ def partition_checkin():
         tune_data = pd.concat([tune_data, df_tune])
         test_data = pd.concat([test_data, df_test])
 
-    # 加起來應該要等於 1,308,794 (385077)
-    print("train_data = " + str(len(train_data)))  # 263823
-    print("tune_data = " + str(len(tune_data)))  # 91964
-    print("test_data = " + str(len(test_data)))  # 29290
+    # 加起來應該要等於
+    print("train_data = " + str(len(train_data)))  #
+    print("tune_data = " + str(len(tune_data)))  #
+    print("test_data = " + str(len(test_data)))  #
 
     return train_data, tune_data, test_data
 
