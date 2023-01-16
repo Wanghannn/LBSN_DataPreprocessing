@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 
 
 def read_path(path, colName):
-    print('Start Reading')
+    print('Start Reading: ' + path)
     f = open(path, encoding='UTF-8')
     text = []
     for line in tqdm(f):
@@ -272,8 +272,8 @@ def get_final_checkin():
 
 
 def partition_checkin():
-    final_checkin = read_path(fin_checkin, fin_col_checkin)
-    df_final_checkin = pd.DataFrame(final_checkin, columns=fin_col_checkin)
+    checkin = read_path(fin_checkin, fin_col_checkin)
+    df_final_checkin = pd.DataFrame(checkin, columns=fin_col_checkin)
     df_final_checkin['uid'] = df_final_checkin['uid'].astype('int')
     df_final_checkin['lid'] = df_final_checkin['lid'].astype('int')
     gp = df_final_checkin.groupby(['uid', 'lid']).size().reset_index(name='freq')
