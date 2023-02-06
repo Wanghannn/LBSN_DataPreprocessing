@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import time
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 
 def read_path(path, colName):
@@ -194,6 +195,35 @@ def creat_dic_cat():
     return dic_cat_id, dic_cat_item
 
 
+def remove_some_user(np_filter_checkin, poi):
+    df_checkin = pd.DataFrame(np_filter_checkin, columns=col_checkin)
+    df_poi = pd.DataFrame(poi, columns=col_poi)
+    merge_ = pd.merge(df_checkin, df_poi, on='lid')
+
+    gp_checkin = merge_.groupby(['uid', 'lid', 'category']).size().reset_index(name='count')
+    pd_cat = pd.DataFrame([dic_cat_item.keys(), dic_cat_item.values()]).T
+    pd_cat.columns = ['category', 'new']
+    merge_ = pd.merge(gp_checkin, pd_cat, on='category')
+
+    gp_checkin = merge_.groupby(['uid', 'new']).size().reset_index(name='count')
+    pd_cat = pd.DataFrame([dic_cat_id.keys(), dic_cat_id.values()]).T
+    pd_cat.columns = ['new', 'new_id']
+    merge_ = pd.merge(gp_checkin, pd_cat, on='new')
+
+    user_prefer = {}
+    for user in tqdm(merge_['uid'].unique()):
+        temp_prefer = np.array(merge_[merge_['uid'] == user]['count'])
+        temp_top_rate = temp_prefer.max()/temp_prefer.sum()
+
+        if temp_top_rate >= 0.3:
+            user_prefer[user] = True
+        else:
+            user_prefer[user] = False
+
+    keys = [k for k, v in user_prefer.items() if v]
+    return keys
+
+
 ''' 統整
     # 論文整理出的數量 User = (24,941); POI = (28,593); Check-in = (1,196,248)
     # v1: User = 19,283; POI = 63,710; Check-in = 1,796,959 移除被check-in < 10 次的POI
@@ -225,6 +255,15 @@ def get_final_checkin():
     # 篩選資料
     print('gfc_Filtering data....')
     np_filter_checkin = preprocess_v2(np_checkin, np_poi)
+
+    # 移除訪問偏好不顯著的用戶
+    retain_keys = remove_some_user(np_filter_checkin, np_poi)
+    df_filter_checkin = pd.DataFrame(np_filter_checkin, columns=col_checkin)
+    df_filter_checkin = df_filter_checkin[df_filter_checkin['uid'].isin(retain_keys)]
+    print("# user = " + str(len(df_filter_checkin['uid'].unique())))  #
+    print("# poi = " + str(len(df_filter_checkin['lid'].unique())))  #
+    print("# checking = " + str(len(df_filter_checkin)))  #
+    np_filter_checkin = df_filter_checkin.to_numpy()
 
     np_filter_checkin = np.delete(np_filter_checkin, -1, axis=1)  # [[8172 9479 1333447208.0] ...]
 
@@ -366,6 +405,8 @@ if __name__ == '__main__':
     fin_col_checkin = ['uid', 'lid', 'time']
 
     """實際處理"""
+    dic_cat_id, dic_cat_item = creat_dic_cat()
+
     # checkins (DONE)
     final_checkin, dic_uid, dic_lid = get_final_checkin()
     final_checkin.to_csv(data_dir + 'final/checkins.txt', header=None, index=None, sep='\t', mode='a')
@@ -396,7 +437,7 @@ if __name__ == '__main__':
     final_poi_coos.to_csv(data_dir + 'final/poi_coos.txt', header=None, index=None, sep='\t', mode='a')
 
     # Get poi categories
-    dic_cat_id, dic_cat_item = creat_dic_cat()
+    # dic_cat_id, dic_cat_item = creat_dic_cat()
     final_poi_categories = get_final_poi_categories()
     final_poi_categories = pd.DataFrame(final_poi_categories)
     final_poi_categories.to_csv(data_dir + 'final/poi_categories.txt', header=None, index=None, sep='\t', mode='a')
