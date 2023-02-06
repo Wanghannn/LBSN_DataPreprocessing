@@ -114,22 +114,23 @@ def preprocess_v2(np_checkin):
     return df_checkin.to_numpy()
 
 
-def preprocess_v3(np_checkin):
+def preprocess_v3(np_checkin, np_poi):
     # 轉成DF (懶得改程式)
     df_checkin = pd.DataFrame(np_checkin, columns=col_checkin)
+    df_poi = pd.DataFrame(np_poi, columns=col_poi)
 
     print("# Ori user = " + str(len(df_checkin['uid'].unique())))  # 1,987,929
     print("# Ori poi = " + str(len(df_checkin['lid'].unique())))  # 150,346
     print("# Ori checking = " + str(len(df_checkin)))  # 6,990,280
 
-    df_user = df_checkin['uid'].unique()
-    df_user, other_ = train_test_split(df_user, test_size=0.5, random_state=42)
+    # df_user = df_checkin['uid'].unique()
+    # df_user, other_ = train_test_split(df_user, test_size=0.5, random_state=42)
+    #
+    # df_checkin = df_checkin[df_checkin['uid'].isin(df_user)]
 
-    df_checkin = df_checkin[df_checkin['uid'].isin(df_user)]
-
-    # # 1
-    # df_poi_us = df_poi[df_poi['country'] == 'US']  # len() = 1990327
-    # df_checkin = df_checkin[df_checkin['lid'].isin(df_poi_us['lid'])]  # len() = 3244126
+    # 1
+    df_poi_la = df_poi[df_poi['state'] == 'LA']  # len() = 1990327
+    df_checkin = df_checkin[df_checkin['lid'].isin(df_poi_la['lid'])]  # len() = 3244126
 
     # 3
     gp = df_checkin.groupby(['lid', 'uid']).size().reset_index(name='count')
@@ -242,6 +243,7 @@ def get_final_checkin():
     print('get_final_checkin')
     print('gfc_Loading data....')
     np_checkin = read_path(checkin_file, col_checkin)
+    np_poi = read_path(poi_file, col_poi)
     print('gfc_Loading done')
 
     # # 原始資料量
@@ -253,7 +255,7 @@ def get_final_checkin():
     print('gfc_Filtering data....')
     # np_filter_checkin_v1 = preprocess_v1(np_checkin)  # 一般篩選
     # np_filter_checkin_v2 = preprocess_v2(np_checkin)  # 先移除較舊的原始資料
-    np_filter_checkin_v3 = preprocess_v3(np_checkin)  # 隨機移除部分user(因為user太多，推薦模型要跑很久)
+    np_filter_checkin_v3 = preprocess_v3(np_checkin, np_poi)  # 隨機移除部分user(因為user太多，推薦模型要跑很久)
 
     # 排序checkin
     np_filter_checkin = sort_checkin(np_filter_checkin_v3)
@@ -341,35 +343,26 @@ def get_final_poi_coos():
     # np.save(data_dir + 'temp/poi_coos_cat.npy', np_poi_us)
     finalPOI = np.delete(np_poi, [-1, -2, -3, -4], axis=1)
     # np.save(data_dir + 'temp/poi_coos.npy', finalPOI)
-    return finalPOI
+    return finalPOI, np_poi
+
+
+def creat_dic_cat():
+    # DONE
+    # 1. 建立類別id字典 {'Restaurants':0, 'Food Shop':1, ... , 'Office':21}
+    np_my_category = read_path(poi_file, col_poi)
+    fdc_dic_cat_id = create_dic(np.unique(np_my_category[:, 3]))
+    return fdc_dic_cat_id
 
 
 def get_final_poi_categories():
-    np_poi_cat = np.load(fin_poi_cat, allow_pickle='TRUE')
-    np_poi_cat = np.delete(np_poi_cat, [1, 2, -1], axis=1)
+    np_poi_cat = np.delete(final_poi, [1, 2, 4, 5, 6], axis=1)
     ls_id_cat = []
-    ls_name_cat = []
     for i in np_poi_cat:
-        if 'Caf' in i[1]:
-            ls_id_cat.append('Coffee')
-            ls_name_cat.append(dic_cat_id['Coffee'])
-            continue
-        elif 'Conference' in i[1]:
-            ls_id_cat.append('Office')
-            ls_name_cat.append(dic_cat_id['Office'])
-            continue
-        ls_id_cat.append(dic_cat_item[i[1]])
-        ls_name_cat.append(dic_cat_id[dic_cat_item[i[1]]])
+        ls_id_cat.append(dic_cat_id[i[1]])
 
     np_new_cat_id = np.array([ls_id_cat])
-    np_new_cat_name = np.array([ls_name_cat])
-
     np_poi_cat = np.insert(np_poi_cat, -1, values=np_new_cat_id, axis=1)
-    np_poi_cat = np.insert(np_poi_cat, -1, values=np_new_cat_name, axis=1)
-    np_poi_cat = np.delete(np_poi_cat, [1, -1], axis=1)
-
-    np.save(data_dir + 'temp/final_poi_categories.npy', np_poi_cat)
-
+    np_poi_cat = np.delete(np_poi_cat, -1, axis=1)
     return np_poi_cat
 
 
@@ -383,7 +376,7 @@ if __name__ == '__main__':
     json_friendship_file = data_dir + 'original/yelp_academic_dataset_user.json'
 
     checkin_file = data_dir + 'original/checkins.txt'
-    poi_file = data_dir + 'original/pois.txt'
+    poi_file = data_dir + 'original/new_pois.txt'
     friendship_file = data_dir + 'original/friendship.txt'  # len = 53,182,778 (muti = 57029277)
 
     col_checkin = ['uid', 'lid', 'time']
@@ -403,29 +396,35 @@ if __name__ == '__main__':
     """實際處理"""
     # checkins (v3 DONE)
     final_checkin, dic_uid, dic_lid = get_final_checkin()
-    # final_checkin.to_csv(data_dir + 'final/checkins.txt', header=None, index=None, sep='\t', mode='a')
+    final_checkin.to_csv(data_dir + 'final/checkins.txt', header=None, index=None, sep='\t', mode='a')
 
     # data_size (v3 DONE)
     user_ = len(final_checkin[0].unique())
     poi_ = len(final_checkin[1].unique())
     df_datasize = pd.DataFrame([user_, poi_]).T
-    # df_datasize.to_csv(data_dir + 'final/data_size.txt', header=None, index=None, sep='\t', mode='a')
+    df_datasize.to_csv(data_dir + 'final/data_size.txt', header=None, index=None, sep='\t', mode='a')
 
     # 分割資料 (train: 70%, tune: 10%, test: 20%) (v3 DONE)
     train, tune, test = partition_checkin()
     # 儲存 train, tune, test (v3 DONE)
-    # train.to_csv(data_dir + 'final/train.txt', header=None, index=None, sep='\t', mode='a')
-    # tune.to_csv(data_dir + 'final/tune.txt', header=None, index=None, sep='\t', mode='a')
-    # test.to_csv(data_dir + 'final/test.txt', header=None, index=None, sep='\t', mode='a')
+    train.to_csv(data_dir + 'final/train.txt', header=None, index=None, sep='\t', mode='a')
+    tune.to_csv(data_dir + 'final/tune.txt', header=None, index=None, sep='\t', mode='a')
+    test.to_csv(data_dir + 'final/test.txt', header=None, index=None, sep='\t', mode='a')
 
     # Get social_relations (v3 DONE)
     final_social_relations = get_final_social_relations()
     # 儲存 final_social_relations (v3 DONE)
-    # final_social_relations = pd.DataFrame(final_social_relations)
-    # final_social_relations.to_csv(data_dir + 'final/social_relations.txt', header=None, index=None, sep='\t', mode='a')
+    final_social_relations = pd.DataFrame(final_social_relations)
+    final_social_relations.to_csv(data_dir + 'final/social_relations.txt', header=None, index=None, sep='\t', mode='a')
 
     # Get poi_coos (v3 DONE)
-    final_poi_coos = get_final_poi_coos()
+    final_poi_coos, final_poi = get_final_poi_coos()
     # 儲存 final_poi_coos (v3 DONE)
-    # final_poi_coos = pd.DataFrame(final_poi_coos)
-    # final_poi_coos.to_csv(data_dir + 'final/poi_coos.txt', header=None, index=None, sep='\t', mode='a')
+    final_poi_coos = pd.DataFrame(final_poi_coos)
+    final_poi_coos.to_csv(data_dir + 'final/poi_coos.txt', header=None, index=None, sep='\t', mode='a')
+
+    # Get poi categories
+    dic_cat_id = creat_dic_cat()
+    final_poi_categories = get_final_poi_categories()
+    final_poi_categories = pd.DataFrame(final_poi_categories)
+    final_poi_categories.to_csv(data_dir + 'final/poi_categories.txt', header=None, index=None, sep='\t', mode='a')
